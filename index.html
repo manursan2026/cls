@@ -27,13 +27,13 @@
         .btn:hover { background-color: #004494; }
         
         /* Header Grid */
-        .header-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
-        .header-item { background-color: #fcfcfc; padding: 8px; border-radius: 4px; border-left: 3px solid var(--primary-color); }
-        .header-item label { font-weight: bold; font-size: 0.85em; display: block; color: #666; }
+        .header-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+        .header-item { background-color: #fcfcfc; padding: 8px; border-radius: 4px; border-left: 3px solid var(--primary-color); border-bottom: 1px solid #eee; }
+        .header-item label { font-weight: bold; font-size: 0.85em; display: block; color: #666; text-transform: uppercase; }
         .header-item span { font-size: 1em; font-family: 'Consolas', monospace; color: #000; }
         
         /* Table */
-        .table-container { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid #eee; }
+        .table-container { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid #eee; display: none; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
         th, td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
         th { background-color: #f8f9fa; position: sticky; top: 0; z-index: 1; font-weight: bold; }
@@ -42,18 +42,13 @@
         /* Status */
         .status-ok { color: var(--success-color); font-weight: bold; }
         .status-error { color: #dc3545; font-weight: bold; }
-        
-        /* Debug Box */
-        .debug-box { background-color: #222; color: #0f0; font-family: monospace; padding: 15px; border-radius: 4px; margin-top: 15px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
-        .debug-title { color: #ff0; font-weight: bold; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Analizador ASFA Digital (.CLS) - Depuración</h1>
+    <h1>Analizador ASFA Digital (.CLS)</h1>
     
-    <!-- Zona de Carga -->
     <div class="card">
         <div class="file-input-wrapper" id="dropZone">
             <div>
@@ -63,28 +58,26 @@
             </div>
         </div>
         <div id="fileStatus" style="margin-top:10px; text-align: center;"></div>
-        <!-- Contenedor de debug -->
-        <div id="debugContainer" style="display:none;"></div>
     </div>
 
-    <!-- Zona de Cabecera -->
     <div class="card" id="headerSection" style="display:none;">
         <h2>1. Cabecera del Registro</h2>
         <div class="header-grid" id="headerData"></div>
     </div>
 
-    <!-- Zona de Gráficas -->
     <div class="card" id="chartsSection" style="display:none;">
         <h2>2. Gráfica de Señales</h2>
         <div id="speedChart"></div>
     </div>
 
-    <!-- Zona de Datos -->
     <div class="card" id="packetsSection" style="display:none;">
         <h2>3. Registro de Eventos</h2>
-        <p id="packetCountInfo" style="display:inline-block; margin-right:15px;"></p>
-        <button class="btn" id="exportBtn" style="display:none;">Exportar Vista a CSV</button>
-        <button class="btn" id="toggleTableBtn">Ocultar Tabla</button>
+        <div style="margin-bottom: 10px;">
+            <p id="packetCountInfo" style="display:inline-block; margin-right:15px; font-weight: bold;"></p>
+            <p id="filterInfo" style="display:inline-block; color: #666; font-style: italic;"></p>
+        </div>
+        <button class="btn" id="exportBtn" style="display:none;">Exportar a CSV</button>
+        <button class="btn" id="toggleTableBtn">Mostrar Tabla</button>
         
         <div class="table-container" id="tableContainer" style="margin-top: 15px;">
             <table id="packetsTable">
@@ -110,31 +103,26 @@
 </div>
 
 <script>
-    // --- MAPEO DE VARIABLES ---
     const VARIABLE_MAP = {
         0xFF02: "Cambio fecha/hora", 0xFF03: "Encendido", 0xFF04: "Apagado",
         0xFF05: "Frecuencia", 0xFF06: "Código fallo sistema",
         0xFF10: "Velocidad real", 0xFF11: "Vel. control inicial", 0xFF12: "Vel. control final",
         0xFF13: "Tipo de tren", 0xFF14: "Modo funcionamiento", 0xFF15: "Cabina habilitada",
         0xFF16: "Diámetro rueda", 0xFF17: "Num. serie equipo",
-        0xFF20: "Freno emergencia", 
-        0xFFF0: "Baliza recibida", 
+        0xFF20: "Freno emergencia", 0xFFF0: "Baliza recibida", 
         0xFFF1: "Control Activo", 0xFFF2: "Indicación acústica",
-        // ... (resto de variables igual que antes)
         0xFF30: "Fallo canal 1 ECP", 0xFF31: "Fallo canal 2 ECP", 0xFF32: "Fallo F.A. 1 ECP", 
-        0xFF33: "Fallo F.A. 2 ECP", 0xFF34: "Fallo salida freno", 0xFF35: "Fallo config interna",
+        0xFF33: "Fallo f.A. 2 ECP", 0xFF34: "Fallo salida freno", 0xFF35: "Fallo config interna",
         0xFF5C: "Rec. P.Nivel PR1", 0xFF5D: "Rec. P.Nivel PR2", 
         0xFF66: "Rec. LVI PR1", 0xFF67: "Rec. LVI PR2"
     };
 
     const PULSE_VARS = [0xFFF0, 0xFF5C, 0xFF5D, 0xFF66, 0xFF67];
 
-    // --- UTILIDADES ---
     function decodeBCD(byte) {
         const high = (byte >> 4) & 0x0F;
         const low = byte & 0x0F;
-        if (high > 9 || low > 9) return '??';
-        return `${high}${low}`;
+        return (high > 9 || low > 9) ? '??' : `${high}${low}`;
     }
     
     function calculateChecksum(dataView, startOffset, length) {
@@ -144,16 +132,7 @@
         }
         return sum & 0xFFFF;
     }
-    
-    function formatBytes(dataView, startOffset, length) {
-        let str = "";
-        for(let i=0; i<length; i++) {
-            str += dataView.getUint8(startOffset + i).toString(16).padStart(2, '0').toUpperCase() + " ";
-        }
-        return str;
-    }
 
-    // --- ELEMENTOS DOM ---
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const headerSection = document.getElementById('headerSection');
@@ -163,18 +142,14 @@
     const packetsBody = document.getElementById('packetsBody');
     const fileStatus = document.getElementById('fileStatus');
     const packetCountInfo = document.getElementById('packetCountInfo');
+    const filterInfo = document.getElementById('filterInfo');
     const exportBtn = document.getElementById('exportBtn');
     const toggleTableBtn = document.getElementById('toggleTableBtn');
     const tableContainer = document.getElementById('tableContainer');
-    const debugContainer = document.getElementById('debugContainer');
 
-    // Variables de datos
-    let parsedDataGlobal = []; 
     let allRows = []; 
     let chartData = { x: [], real: [], control: [], if: [], pulse_x: [], pulse_y: [], pulse_text: [] };
-    let errorLogged = false; // Para mostrar solo el primer error
 
-    // --- LISTENERS ---
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
     dropZone.addEventListener('drop', (e) => {
@@ -187,44 +162,35 @@
     });
     dropZone.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', handleFile);
+    
     toggleTableBtn.addEventListener('click', function() {
-        if (tableContainer.style.display === 'none') {
-            tableContainer.style.display = 'block';
-            toggleTableBtn.innerText = "Ocultar Tabla";
-        } else {
-            tableContainer.style.display = 'none';
-            toggleTableBtn.innerText = "Mostrar Tabla";
-        }
+        const isHidden = tableContainer.style.display === 'none' || tableContainer.style.display === '';
+        tableContainer.style.display = isHidden ? 'block' : 'none';
+        toggleTableBtn.innerText = isHidden ? "Ocultar Tabla" : "Mostrar Tabla";
     });
 
-    // --- FUNCION PRINCIPAL ---
     function handleFile(e) {
         const file = e.target.files[0];
         if (!file) return;
         
-        // Reset UI
         headerSection.style.display = 'none';
         chartsSection.style.display = 'none';
         packetsSection.style.display = 'none';
+        tableContainer.style.display = 'none';
+        toggleTableBtn.innerText = "Mostrar Tabla";
         headerData.innerHTML = '';
         packetsBody.innerHTML = '';
-        debugContainer.style.display = 'none';
-        debugContainer.innerHTML = '';
-        parsedDataGlobal = [];
         allRows = [];
         chartData = { x: [], real: [], control: [], if: [], pulse_x: [], pulse_y: [], pulse_text: [] };
         fileStatus.innerText = `Procesando ${file.name}...`;
-        errorLogged = false;
 
         const reader = new FileReader();
         reader.onload = function(event) {
             try {
-                const arrayBuffer = event.target.result;
-                const dataView = new DataView(arrayBuffer);
+                const dataView = new DataView(event.target.result);
                 parseFile(dataView);
-                fileStatus.innerText = `Archivo ${file.name} cargado correctamente.`;
+                fileStatus.innerText = `Archivo: ${file.name}`;
             } catch (error) {
-                console.error(error);
                 fileStatus.innerHTML = `<span class="status-error">Error: ${error.message}</span>`;
             }
         };
@@ -232,40 +198,39 @@
     }
 
     function parseFile(dv) {
-        if (dv.byteLength < 40) throw new Error("Archivo demasiado pequeño");
+        if (dv.byteLength < 40) throw new Error("Archivo demasiado corto para contener cabecera");
 
         const bcdStr = (arr) => Array.from(arr).map(b => decodeBCD(b)).join('');
         const asciiStr = (arr) => Array.from(arr).map(b => b > 31 ? String.fromCharCode(b) : '.').join('');
 
-        const renderHeader = (label, value, unit = '') => {
+        const renderHeader = (label, value) => {
             const div = document.createElement('div');
             div.className = 'header-item';
-            div.innerHTML = `<label>${label}</label><span>${value}${unit}</span>`;
+            div.innerHTML = `<label>${label}</label><span>${value}</span>`;
             headerData.appendChild(div);
         };
 
-        // 1. CABECERA (Checkusum bytes 0-37)
-        const headerCalcCrc = calculateChecksum(dv, 0, 38);
         const headerReadCrc = dv.getUint16(38, true);
+        const headerCalcCrc = calculateChecksum(dv, 0, 38);
 
-        renderHeader("CRC-CCITT", `Calculado: 0x${headerCalcCrc.toString(16).toUpperCase()} (Leído: 0x${headerReadCrc.toString(16).toUpperCase()})`);
+        renderHeader("Marca Inicial", "0x" + dv.getUint16(0, true).toString(16).toUpperCase());
         renderHeader("Versión Formato", asciiStr(new Uint8Array(dv.buffer, 2, 2)));
-        renderHeader("Versión SW Herramienta", asciiStr(new Uint8Array(dv.buffer, 4, 4)));
-        renderHeader("Ident. Usuario", dv.getUint32(8, true));
-        renderHeader("Ident. Fabricante", dv.getUint8(12));
-        renderHeader("Modo de Sistema", dv.getUint8(13));
-        renderHeader("Número de Serie (BCD)", bcdStr(new Uint8Array(dv.buffer, 14, 2)));
-        renderHeader("Número UIC (BCD)", bcdStr(new Uint8Array(dv.buffer, 16, 6)));
-        renderHeader("Número de Rama (BCD)", bcdStr(new Uint8Array(dv.buffer, 22, 2)));
-        renderHeader("Num. Serie Equipo", dv.getUint16(24, true));
-        renderHeader("Versión SW Equipo", asciiStr(new Uint8Array(dv.buffer, 26, 4)));
-        renderHeader("Velocidad Máxima", dv.getUint16(30, true), " km/h");
-        renderHeader("Código de Operador", dv.getUint16(32, true));
-        renderHeader("Número de Paquetes", dv.getUint32(34, true));
+        renderHeader("SW Herramienta", asciiStr(new Uint8Array(dv.buffer, 4, 4)));
+        renderHeader("ID Usuario", dv.getUint32(8, true));
+        renderHeader("ID Fabricante", dv.getUint8(12));
+        renderHeader("Modo Sistema", dv.getUint8(13));
+        renderHeader("Nº Serie (BCD)", bcdStr(new Uint8Array(dv.buffer, 14, 2)));
+        renderHeader("Número UIC", bcdStr(new Uint8Array(dv.buffer, 16, 6)));
+        renderHeader("Nº Rama (BCD)", bcdStr(new Uint8Array(dv.buffer, 22, 2)));
+        renderHeader("Serie Equipo", dv.getUint16(24, true));
+        renderHeader("SW Equipo", asciiStr(new Uint8Array(dv.buffer, 26, 4)));
+        renderHeader("Velocidad Máxima", dv.getUint16(30, true) + " km/h");
+        renderHeader("Código Operador", dv.getUint16(32, true));
+        renderHeader("Total Paquetes", dv.getUint32(34, true));
+        renderHeader("CRC Cabecera", `0x${headerReadCrc.toString(16).toUpperCase()} (${headerCalcCrc === headerReadCrc ? 'OK' : 'ERR'})`);
         
         headerSection.style.display = 'block';
         
-        // 2. PAQUETES
         const numPackets = dv.getUint32(34, true);
         let offset = 40;
         let distanceAccum = 0;
@@ -273,11 +238,9 @@
 
         for (let i = 0; i < numPackets; i++) {
             if (offset + 30 > dv.byteLength) break;
-
             const mark = dv.getUint16(offset, true);
-            if (mark !== 0xDCBA) { offset++; continue; }
+            if (mark !== 0xDCBA) { offset++; i--; continue; }
 
-            // Lectura de datos
             const packetNum = dv.getUint32(offset + 2, true);
             const varCode = dv.getUint16(offset + 6, true);
             const timestamp = dv.getUint32(offset + 8, true);
@@ -288,64 +251,32 @@
             const speedControl = dv.getUint16(offset + 24, true);
             const speedIF = dv.getUint16(offset + 26, true);
 
-            // --- CHECKSUM LOGIC (CORREGIDA) ---
-            // Especificación dice: "comienzo el campo número de paquete" (offset + 2).
-            // Longitud de datos: 26 bytes (NumPaq[4] ... VelIF[2]).
-            const pktCalcCrc = calculateChecksum(dv, offset + 2, 26);
             const pktReadCrc = dv.getUint16(offset + 28, true);
-            const isPktOk = pktCalcCrc === pktReadCrc;
-
-            // --- DEBUG LOGIC ---
-            if (!isPktOk && !errorLogged) {
-                errorLogged = true; // Solo mostramos el primer error para no llenar la pantalla
-                
-                let debugHtml = `<div class="debug-title">ANÁLISIS DE PAQUETE CON ERROR (Primer error encontrado)</div>`;
-                debugHtml += `<div>Paquete #: ${packetNum}</div>`;
-                debugHtml += `<div>Offset archivo: ${offset}</div>`;
-                debugHtml += `<div>Marca (DCBA): 0x${mark.toString(16).toUpperCase()}</div>`;
-                debugHtml += `<hr><div><b>Bytes Datos (Sumados):</b><br>${formatBytes(dv, offset+2, 26)}</div>`;
-                debugHtml += `<div><b>Suma Calculada:</b> ${pktCalcCrc} (0x${pktCalcCrc.toString(16).toUpperCase()})</div>`;
-                debugHtml += `<div><b>Bytes Checksum Leídos:</b> ${formatBytes(dv, offset+28, 2)} => Valor: ${pktReadCrc} (0x${pktReadCrc.toString(16).toUpperCase()})</div>`;
-                debugHtml += `<hr><div style="color:#f55;"><b>NOTA:</b> Si la Marca (DCBA) se incluyera en la suma, el resultado sería ${calculateChecksum(dv, offset, 28)}.</div>`;
-                
-                debugContainer.innerHTML = debugHtml;
-                debugContainer.style.display = 'block';
-            }
+            const isPktOk = calculateChecksum(dv, offset + 2, 26) === pktReadCrc;
 
             distanceAccum += distanceDelta;
-            
             const dateObj = new Date(timestamp * 1000 + millis);
-            const dateStr = dateObj.toISOString().substring(0, 10); 
-            const timeStr = dateObj.toISOString().substring(11, 19); 
-            const msStr = millis.toString().padStart(3, '0');
-            
-            const varName = VARIABLE_MAP[varCode] || "Desconocida";
+            const varName = VARIABLE_MAP[varCode] || "Var 0x" + varCode.toString(16).toUpperCase();
 
-            // Chart Data
             chartData.x.push(dateObj);
             chartData.real.push(speedReal);
             chartData.control.push(speedControl);
             chartData.if.push(speedIF);
 
-            if (PULSE_VARS.includes(varCode)) {
-                const tooltipText = `${varName}<br>Valor Real: ${value}`;
-                const pulseHeight = value > 0 ? 10 : 0;
+            if (PULSE_VARS.includes(varCode) && value !== 0) {
                 chartData.pulse_x.push(dateObj);
-                chartData.pulse_y.push(pulseHeight);
-                chartData.pulse_text.push(tooltipText);
+                chartData.pulse_y.push(10); 
+                chartData.pulse_text.push(`${varName}: ${value}`);
             }
 
-            // Table Data
             const tr = document.createElement('tr');
-            tr.dataset.ts = dateObj.getTime();
-            
             tr.innerHTML = `
                 <td>${packetNum}</td>
-                <td>${dateStr}</td>
-                <td>${timeStr}</td>
-                <td>${msStr}</td>
+                <td>${dateObj.toLocaleDateString()}</td>
+                <td>${dateObj.toLocaleTimeString()}</td>
+                <td>${millis}</td>
                 <td>0x${varCode.toString(16).toUpperCase()}</td>
-                <td><strong>${varName}</strong></td>
+                <td>${varName}</td>
                 <td>${value}</td>
                 <td>${distanceAccum}</td>
                 <td>${speedReal}</td>
@@ -354,92 +285,81 @@
             `;
             fragment.appendChild(tr);
             allRows.push({ row: tr, ts: dateObj.getTime() });
-
             offset += 30;
         }
 
         packetsBody.appendChild(fragment);
         packetsSection.style.display = 'block';
-        tableContainer.style.display = 'block';
-        toggleTableBtn.innerText = "Ocultar Tabla";
-        
-        packetCountInfo.innerText = `Total procesados: ${numPackets}`;
-        
+        packetCountInfo.innerText = `${allRows.length} paquetes`;
         exportBtn.style.display = 'inline-block';
-        exportBtn.onclick = () => {
-            let csvContent = "data:text/csv;charset=utf-8,Paquete;Fecha;Hora;Ms;Codigo;Variable;Valor;Distancia;VelReal;VelCtrl;VelIF\n";
-            allRows.forEach(item => {
-                if(item.row.style.display !== 'none') {
-                    const tds = item.row.querySelectorAll('td');
-                    let rowText = "";
-                    for(let k=0; k<tds.length-1; k++) rowText += tds[k].innerText + ";";
-                    csvContent += rowText.slice(0, -1) + "\n";
-                }
-            });
-            const link = document.createElement('a');
-            link.setAttribute("href", encodeURI(csvContent));
-            link.setAttribute("download", "analisis_asfa_vista.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        };
-
+        
         renderCharts();
     }
 
     function renderCharts() {
-        const traceReal = { x: chartData.x, y: chartData.real, name: 'Vel. Real', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 1 } };
-        const traceControl = { x: chartData.x, y: chartData.control, name: 'Vel. Control', type: 'scatter', mode: 'lines', line: { color: '#ff7f0e', width: 1, shape: 'hv' } };
-        const traceIF = { x: chartData.x, y: chartData.if, name: 'Vel. Intervención', type: 'scatter', mode: 'lines', line: { color: '#d62728', width: 1, shape: 'hv' } };
-        const tracePulses = { x: chartData.pulse_x, y: chartData.pulse_y, text: chartData.pulse_text, hoverinfo: 'x+text', name: 'Eventos (10km/h)', type: 'scatter', mode: 'lines', line: { color: '#2ca02c', width: 2, shape: 'hv' } };
+        chartsSection.style.display = 'block';
+
+        const traces = [
+            { x: chartData.x, y: chartData.real, name: 'V. Real', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 1.5 } },
+            { x: chartData.x, y: chartData.control, name: 'V. Control', type: 'scatter', mode: 'lines', line: { color: '#ff7f0e', shape: 'hv' } },
+            { x: chartData.x, y: chartData.if, name: 'V. Interv.', type: 'scatter', mode: 'lines', line: { color: '#d62728', shape: 'hv' } },
+            { x: chartData.pulse_x, y: chartData.pulse_y, text: chartData.pulse_text, name: 'Eventos', type: 'scatter', mode: 'markers', marker: { color: '#2ca02c', size: 10, symbol: 'diamond' } }
+        ];
 
         const layout = {
-            title: 'Perfil de Velocidad y Eventos',
-            xaxis: { title: 'Tiempo', rangeslider: {} },
-            yaxis: { title: 'Velocidad (km/h)', fixedrange: true },
-            hovermode: 'closest', showlegend: true, height: 600
+            xaxis: { 
+                title: 'Tiempo', 
+                rangeslider: { visible: true }, 
+                type: 'date' 
+            },
+            yaxis: { title: 'km/h', rangemode: 'tozero' },
+            margin: { t: 40, b: 40, l: 50, r: 20 },
+            hovermode: 'x unified',
+            height: 500,
+            dragmode: 'pan'
         };
 
-        const config = { responsive: true, scrollZoom: true, displaylogo: false };
+        const config = { 
+            responsive: true, 
+            scrollZoom: true,
+            displaylogo: false,
+            // Eliminamos las opciones de selección Lasso y Box
+            modeBarButtonsToRemove: ['select2d', 'lasso2d']
+        };
 
-        chartsSection.style.display = 'block';
-        Plotly.newPlot('speedChart', [traceReal, traceControl, traceIF, tracePulses], layout, config);
+        Plotly.newPlot('speedChart', traces, layout, config);
 
         const chartDiv = document.getElementById('speedChart');
+        
         chartDiv.on('plotly_relayout', function(eventdata) {
             let start = null, end = null;
-            if (eventdata['xaxis.range[0]'] !== undefined) {
+            
+            if (eventdata['xaxis.range[0]'] !== undefined && eventdata['xaxis.range[1]'] !== undefined) {
                 start = new Date(eventdata['xaxis.range[0]']).getTime();
                 end = new Date(eventdata['xaxis.range[1]']).getTime();
-            } else if (eventdata['xaxis.range']) {
+            } 
+            else if (eventdata['xaxis.range'] && Array.isArray(eventdata['xaxis.range'])) {
                 start = new Date(eventdata['xaxis.range'][0]).getTime();
                 end = new Date(eventdata['xaxis.range'][1]).getTime();
+            } 
+            else if (eventdata['xaxis.autorange'] === true) {
+                start = null; 
+                end = null;
             }
             
-            if (start !== null && end !== null && !isNaN(start) && !isNaN(end)) {
-                filterTable(start, end);
-            } else {
-                filterTable(null, null);
-            }
+            filterTable(start, end);
         });
-
-        filterTable(null, null);
     }
 
     function filterTable(start, end) {
-        const showAll = (start === null || end === null);
-        for (let i = 0; i < allRows.length; i++) {
-            const item = allRows[i];
-            if (showAll) {
-                item.row.style.display = "";
-            } else {
-                if (item.ts >= start && item.ts <= end) {
-                    item.row.style.display = "";
-                } else {
-                    item.row.style.display = "none";
-                }
-            }
-        }
+        let count = 0;
+        const active = start !== null && end !== null;
+        allRows.forEach(item => {
+            const match = !active || (item.ts >= start && item.ts <= end);
+            item.row.style.display = match ? "" : "none";
+            if (match) count++;
+        });
+        filterInfo.innerText = active ? `(Vista filtrada: ${count} registros)` : "";
     }
 </script>
 </body>
