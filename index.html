@@ -148,7 +148,7 @@
     const tableContainer = document.getElementById('tableContainer');
 
     let allRows = []; 
-    let chartData = { x: [], real: [], control: [], if: [], pulse_x: [], pulse_y: [], pulse_text: [] };
+    let chartData = { x: [], real: [], control: [], if: [], dist: [], pulse_x: [], pulse_y: [], pulse_text: [], pulse_dist: [] };
 
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
@@ -181,7 +181,7 @@
         headerData.innerHTML = '';
         packetsBody.innerHTML = '';
         allRows = [];
-        chartData = { x: [], real: [], control: [], if: [], pulse_x: [], pulse_y: [], pulse_text: [] };
+        chartData = { x: [], real: [], control: [], if: [], dist: [], pulse_x: [], pulse_y: [], pulse_text: [], pulse_dist: [] };
         fileStatus.innerText = `Procesando ${file.name}...`;
 
         const reader = new FileReader();
@@ -262,11 +262,13 @@
             chartData.real.push(speedReal);
             chartData.control.push(speedControl);
             chartData.if.push(speedIF);
+            chartData.dist.push(distanceAccum);
 
             if (PULSE_VARS.includes(varCode) && value !== 0) {
                 chartData.pulse_x.push(dateObj);
                 chartData.pulse_y.push(10); 
                 chartData.pulse_text.push(`${varName}: ${value}`);
+                chartData.pulse_dist.push(distanceAccum);
             }
 
             const tr = document.createElement('tr');
@@ -299,11 +301,53 @@
     function renderCharts() {
         chartsSection.style.display = 'block';
 
+        // Plantilla especial para la primera línea que incluye la distancia
+        // Al usar 'x unified', Plotly concatena los templates de todas las trazas
+        const hoverTmplWithDist = '<b>%{fullData.name}</b>: %{y} km/h<br>Distancia: %{customdata} m<extra></extra>';
+        const hoverTmplBasic = '<b>%{fullData.name}</b>: %{y} km/h<extra></extra>';
+
         const traces = [
-            { x: chartData.x, y: chartData.real, name: 'V. Real', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 1.5 } },
-            { x: chartData.x, y: chartData.control, name: 'V. Control', type: 'scatter', mode: 'lines', line: { color: '#ff7f0e', shape: 'hv' } },
-            { x: chartData.x, y: chartData.if, name: 'V. Interv.', type: 'scatter', mode: 'lines', line: { color: '#d62728', shape: 'hv' } },
-            { x: chartData.pulse_x, y: chartData.pulse_y, text: chartData.pulse_text, name: 'Eventos', type: 'scatter', mode: 'markers', marker: { color: '#2ca02c', size: 10, symbol: 'diamond' } }
+            { 
+                x: chartData.x, 
+                y: chartData.real, 
+                customdata: chartData.dist,
+                name: 'V. Real', 
+                type: 'scatter', 
+                mode: 'lines', 
+                line: { color: '#1f77b4', width: 1.5 },
+                hovertemplate: hoverTmplWithDist // Solo mostramos distancia en esta traza
+            },
+            { 
+                x: chartData.x, 
+                y: chartData.control, 
+                customdata: chartData.dist,
+                name: 'V. Control', 
+                type: 'scatter', 
+                mode: 'lines', 
+                line: { color: '#ff7f0e', shape: 'hv' },
+                hovertemplate: hoverTmplBasic
+            },
+            { 
+                x: chartData.x, 
+                y: chartData.if, 
+                customdata: chartData.dist,
+                name: 'V. Interv.', 
+                type: 'scatter', 
+                mode: 'lines', 
+                line: { color: '#d62728', shape: 'hv' },
+                hovertemplate: hoverTmplBasic
+            },
+            { 
+                x: chartData.pulse_x, 
+                y: chartData.pulse_y, 
+                customdata: chartData.pulse_dist,
+                text: chartData.pulse_text, 
+                name: 'Eventos', 
+                type: 'scatter', 
+                mode: 'markers', 
+                marker: { color: '#2ca02c', size: 10, symbol: 'diamond' },
+                hovertemplate: '<b>%{text}</b><extra></extra>'
+            }
         ];
 
         const layout = {
@@ -316,14 +360,13 @@
             margin: { t: 40, b: 40, l: 50, r: 20 },
             hovermode: 'x unified',
             height: 500,
-            dragmode: 'pan'
+            dragmode: 'zoom' // Zoom activo por defecto
         };
 
         const config = { 
             responsive: true, 
             scrollZoom: true,
             displaylogo: false,
-            // Eliminamos las opciones de selección Lasso y Box
             modeBarButtonsToRemove: ['select2d', 'lasso2d']
         };
 
@@ -333,7 +376,6 @@
         
         chartDiv.on('plotly_relayout', function(eventdata) {
             let start = null, end = null;
-            
             if (eventdata['xaxis.range[0]'] !== undefined && eventdata['xaxis.range[1]'] !== undefined) {
                 start = new Date(eventdata['xaxis.range[0]']).getTime();
                 end = new Date(eventdata['xaxis.range[1]']).getTime();
@@ -346,7 +388,6 @@
                 start = null; 
                 end = null;
             }
-            
             filterTable(start, end);
         });
     }
