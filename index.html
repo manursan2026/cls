@@ -148,7 +148,10 @@
     const tableContainer = document.getElementById('tableContainer');
 
     let allRows = []; 
-    let chartData = { x: [], real: [], control: [], if: [], dist: [], pulse_x: [], pulse_y: [], pulse_text: [], pulse_dist: [] };
+    let chartData = { 
+        x: [], real: [], control: [], if: [], dist: [], 
+        pulse_x: [], pulse_y: [], pulse_text: [], pulse_dist: [], pulse_color: [] 
+    };
 
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
@@ -181,7 +184,10 @@
         headerData.innerHTML = '';
         packetsBody.innerHTML = '';
         allRows = [];
-        chartData = { x: [], real: [], control: [], if: [], dist: [], pulse_x: [], pulse_y: [], pulse_text: [], pulse_dist: [] };
+        chartData = { 
+            x: [], real: [], control: [], if: [], dist: [], 
+            pulse_x: [], pulse_y: [], pulse_text: [], pulse_dist: [], pulse_color: [] 
+        };
         fileStatus.innerText = `Procesando ${file.name}...`;
 
         const reader = new FileReader();
@@ -269,6 +275,15 @@
                 chartData.pulse_y.push(10); 
                 chartData.pulse_text.push(`${varName}: ${value}`);
                 chartData.pulse_dist.push(distanceAccum);
+                
+                // Mapeo de colores por valor solicitado
+                let pointColor = '#6c757d'; // Gris por defecto
+                if (value === 2 || value === 3) pointColor = '#28a745';      // Verde
+                else if (value === 1 || value === 5 || value === 6) pointColor = '#ffc107'; // Amarillo
+                else if (value === 4) pointColor = '#8B4513';                // Marrón (SaddleBrown)
+                else if (value === 7 || value === 8) pointColor = '#dc3545'; // Rojo
+                
+                chartData.pulse_color.push(pointColor);
             }
 
             const tr = document.createElement('tr');
@@ -297,7 +312,6 @@
         exportBtn.style.display = 'inline-block';
         exportBtn.onclick = function() {
             let csvLines = ["Paquete;Fecha;Hora;Ms;Codigo;Variable;Valor;Distancia;VelReal;VelCtrl"];
-            
             allRows.forEach(item => {
                 if (item.row.style.display !== 'none') {
                     const tds = item.row.querySelectorAll('td');
@@ -305,15 +319,11 @@
                     csvLines.push(rowData.join(';'));
                 }
             });
-
-            const csvString = csvLines.join('\n');
-            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
-            
             const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", `asfa_export_${new Date().getTime()}.csv`);
-            link.style.visibility = 'hidden';
+            link.href = url;
+            link.download = `asfa_export_${new Date().getTime()}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -368,7 +378,12 @@
                 name: 'Baliza', 
                 type: 'scatter', 
                 mode: 'markers', 
-                marker: { color: '#2ca02c', size: 10, symbol: 'diamond' },
+                marker: { 
+                    color: chartData.pulse_color, // Colores dinámicos
+                    size: 10, 
+                    symbol: 'diamond',
+                    line: { width: 1, color: '#444' }
+                },
                 hovertemplate: '<b>%{text}</b><extra></extra>'
             }
         ];
