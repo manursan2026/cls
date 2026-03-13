@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador CLS ASFA - Final</title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #0056b3; --bg-color: #f4f6f9; --card-bg: #ffffff;
+            --text-color: #333; --border-color: #ddd; --success-color: #28a745;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; font-size: 14px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1, h2 { color: var(--primary-color); border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .card { background-color: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
+        
+        /* File Input */
+        .file-input-wrapper { border: 2px dashed var(--border-color); padding: 30px; text-align: center; border-radius: 8px; cursor: pointer; transition: all 0.3s; background-color: #fff; }
+        .file-input-wrapper:hover, .file-input-wrapper.dragover { border-color: var(--primary-color); background-color: #f0f7ff; }
+        input[type="file"] { display: none; }
+        
+        /* Buttons */
+        .btn { background-color: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-top: 10px; margin-right: 5px; }
+        .btn:hover { background-color: #004494; }
+        
+        /* Header Grid */
+        .header-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+        .header-item { background-color: #fcfcfc; padding: 8px; border-radius: 4px; border-left: 3px solid var(--primary-color); }
+        .header-item label { font-weight: bold; font-size: 0.85em; display: block; color: #666; }
+        .header-item span { font-size: 1em; font-family: 'Consolas', monospace; color: #000; }
+        
+        /* Table */
+        .table-container { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid #eee; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { padding: 6px 10px; border-bottom: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
+        th { background-color: #f8f9fa; position: sticky; top: 0; z-index: 1; font-weight: bold; }
+        tr:hover { background-color: #f1f1f1; }
+        
+        /* Status */
+        .status-ok { color: var(--success-color); font-weight: bold; }
+        .status-error { color: #dc3545; font-weight: bold; }
+        
+        /* Chart Info */
+        .chart-info { font-size: 0.9em; color: #666; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Analizador ASFA Digital (.CLS)</h1>
+    
+    <!-- Zona de Carga -->
+    <div class="card">
+        <div class="file-input-wrapper" id="dropZone">
+            <div>
+                <strong>Arrastre su archivo .CLS aquí</strong><br>
+                o haga clic para seleccionar
+                <input type="file" id="fileInput" accept=".cls,.CLS">
+            </div>
+        </div>
+        <div id="fileStatus" style="margin-top:10px; text-align: center;"></div>
+    </div>
+
+    <!-- Zona de Cabecera -->
+    <div class="card" id="headerSection" style="display:none;">
+        <h2>1. Cabecera del Registro</h2>
+        <div class="header-grid" id="headerData"></div>
+    </div>
+
+    <!-- Zona de Gráficas -->
+    <div class="card" id="chartsSection" style="display:none;">
+        <h2>2. Gráfica de Señales</h2>
+        <div class="chart-info">
+            <strong>Zoom sincronizado:</strong> La tabla muestra solo los paquetes visibles en la gráfica.
+        </div>
+        <div id="speedChart"></div>
+    </div>
+
+    <!-- Zona de Datos -->
+    <div class="card" id="packetsSection" style="display:none;">
+        <h2>3. Registro de Eventos</h2>
+        <p id="packetCountInfo" style="display:inline-block; margin-right:15px;"></p>
+        <button class="btn" id="exportBtn" style="display:none;">Exportar Vista a CSV</button>
+        <button class="btn" id="toggleTableBtn">Ocultar Tabla</button>
+        
+        <div class="table-container" id="tableContainer" style="margin-top: 15px;">
+            <table id="packetsTable">
+                <thead>
+                    <tr>
+                        <th># Paq</th>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>Ms</th>
+                        <th>Código</th>
+                        <th>Variable</th>
+                        <th>Valor</th>
+                        <th>Dist. (m)</th>
+                        <th>V.Real</th>
+                        <th>V.Ctrl</th>
+                        <th>CK</th>
+                    </tr>
+                </thead>
+                <tbody id="packetsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- MAPEO DE VARIABLES ---
+    const VARIABLE_MAP = {
+        0xFF02: "Cambio fecha/hora", 0xFF03: "Encendido", 0xFF04: "Apagado",
+        0xFF05: "Frecuencia", 0xFF06: "Código fallo sistema",
+        0xFF10: "Velocidad real", 0xFF11: "Vel. control inicial", 0xFF12: "Vel. control final",
+        0xFF13: "Tipo de tren", 0xFF14: "Modo funcionamiento", 0xFF15: "Cabina habilitada",
+        0xFF16: "Diámetro rueda", 0xFF17: "Num. serie equipo",
+        0xFF20: "Freno emergencia", 
+        0xFFF0: "Baliza recibida", 
+        0xFFF1: "Control Activo", 0xFFF2: "Indicación acústica",
+        // Fallos y otros
+        0xFF30: "Fallo canal 1 ECP", 0xFF31: "Fallo canal 2 ECP",
+        0xFF32: "Fallo F.A. 1 ECP", 0xFF33: "Fallo F.A. 2 ECP", 0xFF34: "Fallo salida freno",
+        0xFF35: "Fallo config interna", 0xFF36: "Fallo com reg", 0xFF37: "Fallo lectura DIV",
+        0xFF38: "Fallo Display 1", 0xFF39: "Fallo Display 2", 0xFF3A: "Fallo panel rep 1",
+        0xFF3B: "Fallo panel rep 2", 0xFF3C: "Fallo señal 1 capt", 0xFF3D: "Fallo señal 2 capt",
+        0xFF3E: "Ausencia frec cap1", 0xFF3F: "Ausencia frec cap2", 0xFF40: "Fallo avisador 1",
+        0xFF41: "Fallo avisador 2", 0xFF42: "Ocultación Disp1", 0xFF43: "Ocultación Disp2",
+        0xFF44: "Señal CON", 0xFF45: "ASFA-Conectado", 0xFF46: "Eficacia sistema",
+        0xFF47: "Eficacia DIV", 0xFF48: "Codificadores mec", 0xFF49: "Vel. Cabina 1",
+        0xFF4A: "Vel. Cabina 2", 0xFF50: "Int. Basico PR1", 0xFF51: "Int. Basico PR2",
+        0xFF52: "Puls. AP Cab1", 0xFF53: "Puls. AP Cab2", 0xFF54: "Puls. APrec Cab1",
+        0xFF55: "Puls. APrec Cab2", 0xFF56: "Puls. Prean Cab1", 0xFF57: "Puls. Prean Cab2",
+        0xFF58: "Puls. Aum V PR1", 0xFF59: "Puls. Aum V PR2", 0xFF5A: "Puls. Modo PR1",
+        0xFF5B: "Puls. Modo PR2", 
+        0xFF5C: "Rec. P.Nivel PR1", 0xFF5D: "Rec. P.Nivel PR2", 
+        0xFF5E: "Puls. Reb Auth PR1", 0xFF5F: "Puls. Reb Auth PR2", 0xFF60: "Puls. Rearme PR1",
+        0xFF61: "Puls. Rearme PR2", 0xFF62: "Puls. Alarma PR1", 0xFF63: "Puls. Alarma PR2",
+        0xFF64: "Puls. Ocult PR1", 0xFF65: "Puls. Ocult PR2", 
+        0xFF66: "Rec. LVI PR1", 0xFF67: "Rec. LVI PR2", 
+        0xFF68: "Puls. Conexion PR1", 0xFF69: "Puls. Conexion PR2",
+        0xFF6A: "Vel_Baja Reg", 0xFF6B: "Vel_Media Reg", 0xFF6D: "Vel_Alta Reg"
+    };
+
+    const PULSE_VARS = [0xFFF0, 0xFF5C, 0xFF5D, 0xFF66, 0xFF67];
+
+    // --- UTILIDADES ---
+    function decodeBCD(byte) {
+        const high = (byte >> 4) & 0x0F;
+        const low = byte & 0x0F;
+        if (high > 9 || low > 9) return '??';
+        return `${high}${low}`;
+    }
+    
+    function calculateChecksum(dataView, startOffset, length) {
+        let sum = 0;
+        for (let i = 0; i < length; i++) {
+            sum += dataView.getUint8(startOffset + i);
+        }
+        return sum & 0xFFFF;
+    }
+
+    // --- ELEMENTOS DOM ---
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const headerSection = document.getElementById('headerSection');
+    const chartsSection = document.getElementById('chartsSection');
+    const packetsSection = document.getElementById('packetsSection');
+    const headerData = document.getElementById('headerData');
+    const packetsBody = document.getElementById('packetsBody');
+    const fileStatus = document.getElementById('fileStatus');
+    const packetCountInfo = document.getElementById('packetCountInfo');
+    const exportBtn = document.getElementById('exportBtn');
+    const toggleTableBtn = document.getElementById('toggleTableBtn');
+    const tableContainer = document.getElementById('tableContainer');
+
+    // Variables de datos
+    let parsedDataGlobal = []; 
+    let allRows = []; 
+    let chartData = { x: [], real: [], control: [], if: [], pulse_x: [], pulse_y: [], pulse_text: [] };
+
+    // --- LISTENERS ---
+
+    // 1. Drag and Drop
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files; // Asignar archivos al input
+            handleFile({ target: { files: e.dataTransfer.files } }); // Procesar
+        }
+    });
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // 2. Input File manual
+    fileInput.addEventListener('change', handleFile);
+
+    // 3. Toggle Tabla
+    toggleTableBtn.addEventListener('click', function() {
+        if (tableContainer.style.display === 'none') {
+            tableContainer.style.display = 'block';
+            toggleTableBtn.innerText = "Ocultar Tabla";
+        } else {
+            tableContainer.style.display = 'none';
+            toggleTableBtn.innerText = "Mostrar Tabla";
+        }
+    });
+
+    // --- FUNCION PRINCIPAL ---
+    function handleFile(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Reset UI
+        headerSection.style.display = 'none';
+        chartsSection.style.display = 'none';
+        packetsSection.style.display = 'none';
+        headerData.innerHTML = '';
+        packetsBody.innerHTML = '';
+        parsedDataGlobal = [];
+        allRows = [];
+        chartData = { x: [], real: [], control: [], if: [], pulse_x: [], pulse_y: [], pulse_text: [] };
+        fileStatus.innerText = `Procesando ${file.name}...`;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const arrayBuffer = event.target.result;
+                const dataView = new DataView(arrayBuffer);
+                parseFile(dataView);
+                fileStatus.innerText = `Archivo ${file.name} cargado correctamente.`;
+            } catch (error) {
+                console.error(error);
+                fileStatus.innerHTML = `<span class="status-error">Error: ${error.message}</span>`;
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function parseFile(dv) {
+        if (dv.byteLength < 40) throw new Error("Archivo demasiado pequeño");
+
+        // Helpers de visualización
+        const bcdStr = (arr) => Array.from(arr).map(b => decodeBCD(b)).join('');
+        const asciiStr = (arr) => Array.from(arr).map(b => b > 31 ? String.fromCharCode(b) : '.').join('');
+
+        const renderHeader = (label, value, unit = '') => {
+            const div = document.createElement('div');
+            div.className = 'header-item';
+            div.innerHTML = `<label>${label}</label><span>${value}${unit}</span>`;
+            headerData.appendChild(div);
+        };
+
+        // 1. CABECERA
+        const headerCalcCrc = calculateChecksum(dv, 0, 38);
+        const headerReadCrc = dv.getUint16(38, true);
+
+        renderHeader("CRC-CCITT", `Calculado: 0x${headerCalcCrc.toString(16).toUpperCase()} (Leído: 0x${headerReadCrc.toString(16).toUpperCase()})`);
+        renderHeader("Versión Formato", asciiStr(new Uint8Array(dv.buffer, 2, 2)));
+        renderHeader("Versión SW Herramienta", asciiStr(new Uint8Array(dv.buffer, 4, 4)));
+        renderHeader("Ident. Usuario", dv.getUint32(8, true));
+        renderHeader("Ident. Fabricante", dv.getUint8(12));
+        renderHeader("Modo de Sistema", dv.getUint8(13));
+        renderHeader("Número de Serie (BCD)", bcdStr(new Uint8Array(dv.buffer, 14, 2)));
+        renderHeader("Número UIC (BCD)", bcdStr(new Uint8Array(dv.buffer, 16, 6)));
+        renderHeader("Número de Rama (BCD)", bcdStr(new Uint8Array(dv.buffer, 22, 2)));
+        renderHeader("Num. Serie Equipo", dv.getUint16(24, true));
+        renderHeader("Versión SW Equipo", asciiStr(new Uint8Array(dv.buffer, 26, 4)));
+        renderHeader("Velocidad Máxima", dv.getUint16(30, true), " km/h");
+        renderHeader("Código de Operador", dv.getUint16(32, true));
+        renderHeader("Número de Paquetes", dv.getUint32(34, true));
+        
+        headerSection.style.display = 'block';
+        
+        // 2. PAQUETES
+        const numPackets = dv.getUint32(34, true);
+        let offset = 40;
+        let distanceAccum = 0;
+        const fragment = document.createDocumentFragment();
+
+        for (let i = 0; i < numPackets; i++) {
+            if (offset + 30 > dv.byteLength) break;
+
+            const mark = dv.getUint16(offset, true);
+            if (mark !== 0xDCBA) { offset++; continue; }
+
+            // Lectura de datos
+            const packetNum = dv.getUint32(offset + 2, true);
+            const varCode = dv.getUint16(offset + 6, true);
+            const timestamp = dv.getUint32(offset + 8, true);
+            const millis = dv.getUint16(offset + 12, true);
+            const distanceDelta = dv.getInt32(offset + 14, true);
+            const value = dv.getInt32(offset + 18, true);
+            const speedReal = dv.getUint16(offset + 22, true);
+            const speedControl = dv.getUint16(offset + 24, true);
+            const speedIF = dv.getUint16(offset + 26, true);
+
+            // Checksum Paquete
+            const pktCalcCrc = calculateChecksum(dv, offset, 28);
+            const pktReadCrc = dv.getUint16(offset + 28, true);
+            const isPktOk = pktCalcCrc === pktReadCrc;
+
+            distanceAccum += distanceDelta;
+            
+            // Formateo Tiempo
+            const dateObj = new Date(timestamp * 1000 + millis);
+            const dateStr = dateObj.toISOString().substring(0, 10);
+            const timeStr = dateObj.toISOString().substring(11, 19);
+            const msStr = millis.toString().padStart(3, '0');
+            
+            const varName = VARIABLE_MAP[varCode] || "Desconocida";
+
+            // Chart Data
+            chartData.x.push(dateObj);
+            chartData.real.push(speedReal);
+            chartData.control.push(speedControl);
+            chartData.if.push(speedIF);
+
+            if (PULSE_VARS.includes(varCode)) {
+                const tooltipText = `${varName}<br>Valor Real: ${value}`;
+                const pulseHeight = value > 0 ? 10 : 0;
+                chartData.pulse_x.push(dateObj);
+                chartData.pulse_y.push(pulseHeight);
+                chartData.pulse_text.push(tooltipText);
+            }
+
+            // Table Row
+            const tr = document.createElement('tr');
+            tr.dataset.ts = dateObj.getTime();
+            tr.innerHTML = `
+                <td>${packetNum}</td>
+                <td>${dateStr}</td>
+                <td>${timeStr}</td>
+                <td>${msStr}</td>
+                <td>0x${varCode.toString(16).toUpperCase()}</td>
+                <td><strong>${varName}</strong></td>
+                <td>${value}</td>
+                <td>${distanceAccum}</td>
+                <td>${speedReal}</td>
+                <td>${speedControl}</td>
+                <td class="${isPktOk ? 'status-ok' : 'status-error'}">${isPktOk ? 'OK' : 'ERR'}</td>
+            `;
+            fragment.appendChild(tr);
+            allRows.push({ row: tr, ts: dateObj.getTime() });
+
+            offset += 30;
+        }
+
+        packetsBody.appendChild(fragment);
+        packetsSection.style.display = 'block';
+        tableContainer.style.display = 'block'; // Asegurar visibilidad inicial
+        toggleTableBtn.innerText = "Ocultar Tabla";
+        
+        packetCountInfo.innerText = `Total procesados: ${numPackets}`;
+        
+        exportBtn.style.display = 'inline-block';
+        exportBtn.onclick = () => {
+            let csvContent = "data:text/csv;charset=utf-8,Paquete;Fecha;Hora;Ms;Codigo;Variable;Valor;Distancia;VelReal;VelCtrl;VelIF\n";
+            allRows.forEach(item => {
+                if(item.row.style.display !== 'none') {
+                    const tds = item.row.querySelectorAll('td');
+                    let rowText = "";
+                    for(let k=0; k<tds.length-1; k++) rowText += tds[k].innerText + ";";
+                    csvContent += rowText.slice(0, -1) + "\n";
+                }
+            });
+            const link = document.createElement('a');
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", "analisis_asfa_vista.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        renderCharts();
+    }
+
+    function renderCharts() {
+        const traceReal = { x: chartData.x, y: chartData.real, name: 'Vel. Real', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 1 } };
+        const traceControl = { x: chartData.x, y: chartData.control, name: 'Vel. Control', type: 'scatter', mode: 'lines', line: { color: '#ff7f0e', width: 1, shape: 'hv' } };
+        const traceIF = { x: chartData.x, y: chartData.if, name: 'Vel. Intervención', type: 'scatter', mode: 'lines', line: { color: '#d62728', width: 1, shape: 'hv' } };
+        const tracePulses = { x: chartData.pulse_x, y: chartData.pulse_y, text: chartData.pulse_text, hoverinfo: 'x+text', name: 'Eventos (10km/h)', type: 'scatter', mode: 'lines', line: { color: '#2ca02c', width: 2, shape: 'hv' } };
+
+        const layout = {
+            title: 'Perfil de Velocidad y Eventos',
+            xaxis: { title: 'Tiempo', rangeslider: {} },
+            yaxis: { title: 'Velocidad (km/h)', fixedrange: true },
+            hovermode: 'closest', showlegend: true, height: 600
+        };
+
+        const config = { responsive: true, scrollZoom: true, displaylogo: false };
+
+        chartsSection.style.display = 'block';
+        Plotly.newPlot('speedChart', [traceReal, traceControl, traceIF, tracePulses], layout, config);
+
+        const chartDiv = document.getElementById('speedChart');
+        chartDiv.on('plotly_relayout', function(eventdata) {
+            let start = null, end = null;
+            if (eventdata['xaxis.range[0]'] !== undefined) {
+                start = new Date(eventdata['xaxis.range[0]']).getTime();
+                end = new Date(eventdata['xaxis.range[1]']).getTime();
+            } else if (eventdata['xaxis.range']) {
+                start = new Date(eventdata['xaxis.range'][0]).getTime();
+                end = new Date(eventdata['xaxis.range'][1]).getTime();
+            }
+            
+            if (start !== null && end !== null && !isNaN(start) && !isNaN(end)) {
+                filterTable(start, end);
+            } else {
+                filterTable(null, null);
+            }
+        });
+
+        filterTable(null, null);
+    }
+
+    function filterTable(start, end) {
+        const showAll = (start === null || end === null);
+        for (let i = 0; i < allRows.length; i++) {
+            const item = allRows[i];
+            if (showAll) {
+                item.row.style.display = "";
+            } else {
+                if (item.ts >= start && item.ts <= end) {
+                    item.row.style.display = "";
+                } else {
+                    item.row.style.display = "none";
+                }
+            }
+        }
+    }
+</script>
+</body>
+</html>
