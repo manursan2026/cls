@@ -293,7 +293,32 @@
         packetsBody.appendChild(fragment);
         packetsSection.style.display = 'block';
         packetCountInfo.innerText = `${allRows.length} paquetes`;
+        
         exportBtn.style.display = 'inline-block';
+        exportBtn.onclick = function() {
+            let csvLines = ["Paquete;Fecha;Hora;Ms;Codigo;Variable;Valor;Distancia;VelReal;VelCtrl"];
+            
+            allRows.forEach(item => {
+                if (item.row.style.display !== 'none') {
+                    const tds = item.row.querySelectorAll('td');
+                    let rowData = Array.from(tds).slice(0, 10).map(td => td.innerText);
+                    csvLines.push(rowData.join(';'));
+                }
+            });
+
+            const csvString = csvLines.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `asfa_export_${new Date().getTime()}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
         
         renderCharts();
     }
@@ -301,8 +326,6 @@
     function renderCharts() {
         chartsSection.style.display = 'block';
 
-        // Plantilla especial para la primera línea que incluye la distancia
-        // Al usar 'x unified', Plotly concatena los templates de todas las trazas
         const hoverTmplWithDist = '<b>%{fullData.name}</b>: %{y} km/h<br>Distancia: %{customdata} m<extra></extra>';
         const hoverTmplBasic = '<b>%{fullData.name}</b>: %{y} km/h<extra></extra>';
 
@@ -315,7 +338,7 @@
                 type: 'scatter', 
                 mode: 'lines', 
                 line: { color: '#1f77b4', width: 1.5 },
-                hovertemplate: hoverTmplWithDist // Solo mostramos distancia en esta traza
+                hovertemplate: hoverTmplWithDist
             },
             { 
                 x: chartData.x, 
@@ -342,7 +365,7 @@
                 y: chartData.pulse_y, 
                 customdata: chartData.pulse_dist,
                 text: chartData.pulse_text, 
-                name: 'Eventos', 
+                name: 'Baliza', 
                 type: 'scatter', 
                 mode: 'markers', 
                 marker: { color: '#2ca02c', size: 10, symbol: 'diamond' },
@@ -351,16 +374,12 @@
         ];
 
         const layout = {
-            xaxis: { 
-                title: 'Tiempo', 
-                rangeslider: { visible: true }, 
-                type: 'date' 
-            },
+            xaxis: { title: 'Tiempo', rangeslider: { visible: true }, type: 'date' },
             yaxis: { title: 'km/h', rangemode: 'tozero' },
             margin: { t: 40, b: 40, l: 50, r: 20 },
             hovermode: 'x unified',
             height: 500,
-            dragmode: 'zoom' // Zoom activo por defecto
+            dragmode: 'zoom'
         };
 
         const config = { 
@@ -373,7 +392,6 @@
         Plotly.newPlot('speedChart', traces, layout, config);
 
         const chartDiv = document.getElementById('speedChart');
-        
         chartDiv.on('plotly_relayout', function(eventdata) {
             let start = null, end = null;
             if (eventdata['xaxis.range[0]'] !== undefined && eventdata['xaxis.range[1]'] !== undefined) {
