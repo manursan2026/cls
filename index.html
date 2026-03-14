@@ -203,9 +203,9 @@
     let currentXRange = [null, null];
     let cData = { 
         x: [], real: [], control: [], intervention: [], dist: [], 
-        accX: [], accY: [], 
-        bX: [], bY: [], bT: [], bC: [],
-        ebX: [], ebY: [], ebT: [] 
+        accX: [], accY: [], accDist: [],
+        bX: [], bY: [], bT: [], bC: [], bDist: [],
+        ebX: [], ebY: [], ebT: [], ebDist: []
     };
 
     function safeMax(arr) {
@@ -237,7 +237,7 @@
         if (!file) return;
         dom.fileStatus.innerText = "Analizando registro...";
         allRows = [];
-        cData = { x: [], real: [], control: [], intervention: [], dist: [], accX: [], accY: [], bX: [], bY: [], bT: [], bC: [], ebX: [], ebY: [], ebT: [] };
+        cData = { x: [], real: [], control: [], intervention: [], dist: [], accX: [], accY: [], accDist: [], bX: [], bY: [], bT: [], bC: [], bDist: [], ebX: [], ebY: [], ebT: [], ebDist: [] };
         dom.headerData.innerHTML = ''; dom.packetsBody.innerHTML = '';
         dom.varFilter.innerHTML = '<option value="all">-- Todas las variables --</option>';
         
@@ -273,7 +273,7 @@
             const nP = dv.getUint32(34, true);
             let ptr = 40, dAcc = 0, vL = null, tL = null;
             let lastEBState = -1; 
-            let lastPowerOnTs = -1; // Rastro del último encendido
+            let lastPowerOnTs = -1; 
 
             const fragment = document.createDocumentFragment();
             const uniqueVarsFound = new Set();
@@ -298,46 +298,34 @@
                 const time = tsS * 1000 + ms;
                 const date = new Date(time);
 
-                // --- Lógica de Encendido ---
-                if (vC === 0xFF03) {
-                    lastPowerOnTs = time;
-                }
+                if (vC === 0xFF03) lastPowerOnTs = time;
 
-                // --- Lógica de filtrado de freno de emergencia ---
                 let skipPacket = false;
                 if (vC === 0xFF20) {
-                    if (val === 0) {
-                        skipPacket = true;
-                    } else if (val === 1) {
-                        // Solo representar el primer 1 tras un 0
-                        if (lastEBState === 1) {
-                            skipPacket = true;
-                        } else if (lastEBState === 0) {
-                            // Cambio 0 -> 1 detectado. 
-                            // Ignorar si coincide exactamente con el momento del encendido
+                    if (val === 0) skipPacket = true;
+                    else if (val === 1) {
+                        if (lastEBState === 1) skipPacket = true;
+                        else if (lastEBState === 0) {
                             if (time !== lastPowerOnTs) {
                                 cData.ebX.push(date);
                                 cData.ebY.push(2.3);
                                 cData.ebT.push("DISPARO FRENO EMERGENCIA");
-                            } else {
-                                skipPacket = true;
-                            }
-                        } else {
-                            // Primer paquete de freno en el archivo es un 1 (no hay transición 0->1 grabada)
-                            skipPacket = true;
-                        }
+                                cData.ebDist.push(dAcc + dD);
+                            } else skipPacket = true;
+                        } else skipPacket = true;
                     }
                     lastEBState = val;
                 }
 
                 dAcc += dD;
                 
-                // Aceleración sin huecos
+                // Aceleración
                 if (vL !== null && time !== tL) {
                     let rawAcc = ((vr - vL) / 3.6) / ((time - tL) / 1000);
                     if (rawAcc >= -2.5 && rawAcc <= 2.5) {
                         cData.accX.push(date);
                         cData.accY.push(rawAcc);
+                        cData.accDist.push(dAcc);
                     }
                 }
                 vL = vr; tL = time;
@@ -347,9 +335,9 @@
 
                 if (BALIZA_CODES.includes(vC) && val !== 0) {
                     cData.bX.push(date); cData.bY.push(10); cData.bT.push(`Baliza: ${val}`); cData.bC.push(getBalizaColor(val));
+                    cData.bDist.push(dAcc);
                 }
 
-                // Si no debemos omitir el paquete lo añadimos a la lista
                 if (!skipPacket) {
                     const tr = document.createElement('tr');
                     const vName = VARIABLE_MAP[vC] || "Variable 0x" + vC.toString(16).toUpperCase();
@@ -361,7 +349,6 @@
                 ptr += 30;
             }
 
-            // Población del filtro de variables
             const sortedVars = Array.from(uniqueVarsFound).sort((a, b) => a - b);
             sortedVars.forEach(code => {
                 const opt = document.createElement('option');
@@ -381,11 +368,12 @@
     function renderChart() {
         const mx = Math.max(safeMax(cData.real), safeMax(cData.control), 120);
         const trs = [
-            { x: cData.x, y: cData.real, name: 'V. Real', mode: 'lines', line: { color: '#1f77b4', width: 2 }, hovertemplate: '%{y} km/h' },
-            { x: cData.x, y: cData.control, name: 'V. Control', mode: 'lines', line: { color: '#ff7f0e', shape: 'hv', width: 1.5 } },
-            { x: cData.x, y: cData.intervention, name: 'V. Interv.', mode: 'lines', line: { color: '#d62728', shape: 'hv', width: 1.5 } },
-            { x: cData.bX, y: cData.bY, text: cData.bT, name: 'Baliza', mode: 'markers', marker: { color: cData.bC, size: 10, symbol: 'diamond' } },
-            { x: cData.accX, y: cData.accY, name: 'Aceleración', mode: 'lines', line: { color: '#9467bd', width: 1.5 }, yaxis: 'y2', fill: 'none', visible: false, hovertemplate: '%{y:.2f} m/s²' },
+            // Distancia habilitada solo en V. Real para evitar repeticiones en el hover unificado
+            { x: cData.x, y: cData.real, customdata: cData.dist, name: 'V. Real', mode: 'lines', line: { color: '#1f77b4', width: 2 }, hovertemplate: '%{y} km/h<br>Dist: %{customdata} m<extra></extra>' },
+            { x: cData.x, y: cData.control, name: 'V. Control', mode: 'lines', line: { color: '#ff7f0e', shape: 'hv', width: 1.5 }, hovertemplate: '%{y} km/h<extra></extra>' },
+            { x: cData.x, y: cData.intervention, name: 'V. Interv.', mode: 'lines', line: { color: '#d62728', shape: 'hv', width: 1.5 }, hovertemplate: '%{y} km/h<extra></extra>' },
+            { x: cData.bX, y: cData.bY, text: cData.bT, name: 'Baliza', mode: 'markers', marker: { color: cData.bC, size: 10, symbol: 'diamond' }, hovertemplate: '<b>%{text}</b><extra></extra>' },
+            { x: cData.accX, y: cData.accY, name: 'Aceleración', mode: 'lines', line: { color: '#9467bd', width: 1.5 }, yaxis: 'y2', fill: 'none', visible: false, hovertemplate: '%{y:.2f} m/s²<extra></extra>' },
             { x: cData.ebX, y: cData.ebY, text: cData.ebT, name: 'Disparo Freno', mode: 'markers', marker: { color: 'red', size: 12, symbol: 'square' }, yaxis: 'y2', visible: false, hovertemplate: '<b>ACTIVA FRENO</b><extra></extra>' }
         ];
         const lay = {
@@ -415,9 +403,7 @@
             const p = allRows[i];
             const timeMatch = !hasTimeFilter || (p.ts >= start && p.ts <= end);
             const varMatch = selectedVar === 'all' || p.varC === parseInt(selectedVar);
-            
             p.row.style.display = (timeMatch && varMatch) ? "" : "none";
-            
             if (timeMatch) { 
                 if (counts[p.varC] !== undefined) counts[p.varC]++;
                 else counts[p.varC] = 1;
