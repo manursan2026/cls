@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analizador ASFA Digital - Telemetría de Alto Rendimiento</title>
+    <title>Analizador ASFA Digital</title>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <style>
         :root{--primary:#0056b3;--bg:#f8f9fa;--card:#ffffff;--text:#333;--border:#dee2e6;--success:#28a745;--error:#dc3545}
@@ -14,10 +14,12 @@
         .drop-zone{border:2px dashed var(--border);padding:40px;text-align:center;border-radius:10px;cursor:pointer;transition:.3s;background:#fff}
         .drop-zone.dragging{border-color:var(--primary);background:#f0f7ff;transform:scale(1.01)}
         input[type=file]{display:none}
-        .header-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+        .header-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
         .header-item{background:#fcfcfc;padding:12px;border-radius:8px;border-left:5px solid var(--primary);border-bottom:1px solid #eee}
         .header-item label{font-weight:bold;font-size:.8em;display:block;color:#666;text-transform:uppercase}
         .header-item span{font-size:1.1em;font-family:'Consolas',monospace;color:#111}
+        .header-item span.ok{color:var(--success)}
+        .header-item span.error{color:var(--error)}
         .chart-controls{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:16px;background:#f1f3f5;padding:15px;border-radius:8px}
         .stats-badge{background:#fff;padding:8px 16px;border-radius:20px;border:1px solid #ced4da;font-weight:bold;color:var(--primary);min-width:220px;text-align:center}
         .filter-section{background:#f8f9fa;padding:15px;border-radius:8px;border:1px solid #eee;margin-bottom:15px}
@@ -94,7 +96,7 @@
                 <div class="table-container">
                     <div id="renderProgress" class="loading-bar"></div>
                     <table id="packetsTable">
-                        <thead><tr><th>#</th><th>Fecha</th><th>Hora</th><th>Ms</th><th>Cód</th><th>Variable</th><th>Valor</th><th>Dist (m)</th><th>V.R</th><th>V.C</th><th>CK</th></tr></thead>
+                        <thead><tr><th>#</th><th>Fecha</th><th>Hora</th><th>Ms</th><th>Cód</th><th>Variable</th><th>Valor</th><th>Dist (m)</th><th>V.R</th><th>V.C</th><th>V.IF</th><th>CK</th></tr></thead>
                         <tbody id="packetsBody"></tbody>
                     </table>
                 </div>
@@ -110,11 +112,15 @@
 
 <script>
 const VAR_MAP={0xFF02:"Cambio fecha/hora",0xFF03:"Encendido",0xFF04:"Apagado",0xFF05:"Frecuencia",0xFF06:"Código de fallo del sistema",0xFF10:"Velocidad real del tren",0xFF11:"Velocidad de control inicial",0xFF12:"Velocidad Control final",0xFF13:"Tipo de tren",0xFF14:"Modo de funcionamiento",0xFF15:"Cabina habilitada",0xFF16:"Diámetro de rueda",0xFF17:"Número de serie del equipo/sistema ASFA-D",0xFF20:"Freno de emergencia",0xFFF0:"Baliza recibida",0xFFF1:"Control Activo",0xFFF2:"Indicación acústica",0xFF30:"Fallo de canal 1 en ECP",0xFF31:"Fallo de canal 2 en ECP",0xFF32:"Fallo F.A. 1 de ECP",0xFF33:"Fallo F.A. 2 de ECP",0xFF34:"Fallo salida de freno de emergencia",0xFF35:"Fallo en la configuración interna del sistema",0xFF36:"Fallo de comunicaciones con el registrador",0xFF37:"Fallo de lectura del DIV en el arranque",0xFF38:"Fallo en el Display 1",0xFF39:"Fallo en el Display 2",0xFF3A:"Fallo en el panel repetidor 1",0xFF3B:"Fallo en el panel repetidor 2",0xFF3C:"Fallo en la señal 1 del captador de velocidad",0xFF3D:"Fallo en la señal 2 del captador de velocidad",0xFF3E:"Ausencia de frecuencia permanente en captador 1",0xFF3F:"Ausencia de frecuencia permanente en captador 2",0xFF40:"Fallo 1 en el avisador acústico (Modo Básico)",0xFF41:"Fallo 2 en el avisador acústico (Resto de modos)",0xFF42:"Estado de ocultación en Display 1",0xFF43:"Estado de ocultación en Display 2",0xFF44:"Valor de la señal CON (LZB/ERTMS)",0xFF45:"Valor de la salida ASFA-Conectado",0xFF46:"Estado de la eficacia del sistema",0xFF47:"Estado de la eficacia del DIV",0xFF48:"Estado de codificadores mecánicos",0xFF49:"Velocidad en Cabina 1 o cabina principal",0xFF4A:"Velocidad en Cabina 2",0xFF50:"Valor interruptor ASFA Básico PR 1",0xFF51:"Valor interruptor ASFA Básico PR 2",0xFF52:"Valor pulsador Anuncio de parada Cab 1",0xFF53:"Valor pulsador Anuncio de parada Cab 2",0xFF54:"Valor pulsador Anuncio de precaución Cab 1",0xFF55:"Valor pulsador Anuncio de precaución Cab 2",0xFF56:"Valor pulsador preanuncio parada/vía libre condicional Cab 1",0xFF57:"Valor pulsador preanuncio parada/vía libre condicional Cab 2",0xFF58:"Valor pulsador aumento de velocidad control PR 1",0xFF59:"Valor pulsador aumento de velocidad control PR 2",0xFF5A:"Valor pulsador modo PR 1",0xFF5B:"Valor pulsador modo PR 2",0xFF5C:"Valor pulsador reconocimiento Paso a Nivel PR 1",0xFF5D:"Valor pulsador reconocimiento Paso a Nivel PR 2",0xFF5E:"Valor pulsador rebase autorizado PR 1",0xFF5F:"Valor pulsador rebase autorizado PR 2",0xFF60:"Valor pulsador rearme de freno PR 1",0xFF61:"Valor pulsador rearme de freno PR 2",0xFF62:"Valor pulsador alarma PR 1",0xFF63:"Valor pulsador alarma PR 2",0xFF64:"Valor pulsador ocultación PR 1",0xFF65:"Valor pulsador ocultación PR 2",0xFF66:"Valor pulsador reconocimiento LVI PR 1",0xFF67:"Valor pulsador reconocimiento LVI PR 2",0xFF68:"Valor pulsador conexión PR 1",0xFF69:"Valor pulsador conexión PR 2",0xFF6A:"Señal discreta Vel_Baja (Registrador)",0xFF6B:"Señal discreta Vel_Media (Registrador)",0xFF6D:"Señal discreta Vel_Alta (Registrador)"};
+
 const BALIZA_CODES=[0xFFF0,0xFF5C,0xFF5D,0xFF66,0xFF67];
+
+const MODO_MAP={1:"Autopropulsado",2:"Autopropulsado Monocabina",3:"Locomotora Bicabina",4:"Reserva",5:"Autopropulsado",6:"Autopropulsado Monocabina",7:"Locomotora Bicabina"};
+const OPERADOR_MAP={1:"ADIF",2:"RENFE",3:"COMSA RAIL TRANSPORT",4:"CONTINENTAL RAIL",5:"ACCIONA RAIL SERVICES",6:"ACTIVA RAIL",7:"TRACCIÓN RAIL",8:"EUSKO TRENBIDEAK",9:"ARCELORMITTAL SIDERAIL",10:"EWSI",11:"LOGITREN FERROVIARIA",12:"FESUR",13:"AOPJA",14:"SPENO",15:"SNCF",16:"FERROVIAL",17:"FGC",18:"COPASA",19:"ALPHA TRAINS"};
 
 const dom={drop:document.getElementById('dropZone'),fileInput:document.getElementById('fileInput'),accelToggle:document.getElementById('accelToggle'),btnShowSummary:document.getElementById('btnShowSummary'),btnShowDetails:document.getElementById('btnShowDetails'),header:document.getElementById('headerData'),packets:document.getElementById('packetsBody'),summaryBody:document.getElementById('summaryBody'),stats:document.getElementById('globalStats'),filterGrid:document.getElementById('filterGrid'),btnFilterAll:document.getElementById('btnFilterAll'),btnFilterNone:document.getElementById('btnFilterNone'),status:document.getElementById('fileStatus'),spinner:document.getElementById('loadingSpinner'),export:document.getElementById('btnExportCSV'),progressBar:document.getElementById('renderProgress')};
 
-let rawData=[],currentRange=[null,null],chartLines={x:[],real:[],ctrl:[],interf:[],dist:[],accx:[],accy:[],ebx:[],eby:[],ebt:[],bx:[],by:[],bt:[],bc:[]},selectedVars=new Set(),totalInFile=0,renderTimeout=null;
+let rawData=[],currentRange=[null,null],chartLines={x:[],real:[],ctrl:[],interf:[],dist:[],accx:[],accy:[],ebx:[],eby:[],ebt:[],bx:[],by:[],bt:[],bc:[]},selectedVars=new Set(),totalInFile=0,renderTimeout=null,headerChecksumOK=true;
 
 function getBColor(v){if(v===2||v===3)return'#2ecc71';if([1,5,6,9,10,11].includes(v))return'#f1c40f';if(v===7||v===8)return'#e74c3c';return'#95a5a6';}
 
@@ -137,51 +143,77 @@ function parse(dv){
     if(dv.byteLength<40)throw new Error("Cabecera de archivo insuficiente.");
     rawData=[];totalInFile=0;selectedVars.clear();chartLines={x:[],real:[],ctrl:[],interf:[],dist:[],accx:[],accy:[],ebx:[],eby:[],ebt:[],bx:[],by:[],bt:[],bc:[]};
     dom.header.innerHTML='';dom.packets.innerHTML='';dom.filterGrid.innerHTML='';
+    headerChecksumOK=true;
+
     const bcd=a=>Array.from(a).map(b=>`${(b>>4)&15}${b&15}`).join(''),asc=a=>Array.from(a).map(b=>b>31?String.fromCharCode(b):'.').join(''),addH=(l,v)=>dom.header.innerHTML+=`<div class="header-item"><label>${l}</label><span>${v}</span></div>`;
+
     addH("CRC-CCITT","0x"+dv.getUint16(0,true).toString(16).toUpperCase());
-    addH("Versión Formato",asc(new Uint8Array(dv.buffer,2,2)));
-    addH("SW Herram. Conv.",asc(new Uint8Array(dv.buffer,4,4)));
+    addH("Versión Formato Registro",asc(new Uint8Array(dv.buffer,2,2)));
+    addH("SW Herram. Conversión",asc(new Uint8Array(dv.buffer,4,4)));
     addH("ID Usuario",dv.getUint32(8,true));
     addH("ID Fabricante",dv.getUint8(12));
-    addH("Modo Sistema",dv.getUint8(13));
+    const modo=dv.getUint8(13);addH("Modo Sistema",`${modo} - ${MODO_MAP[modo]||'Desconocido'}`);
     addH("Nº Serie UT (BCD)",bcd(new Uint8Array(dv.buffer,14,2)));
     addH("Número UIC",bcd(new Uint8Array(dv.buffer,16,6)));
     addH("Número Rama",bcd(new Uint8Array(dv.buffer,22,2)));
     addH("Serie Equipo",dv.getUint16(24,true));
     addH("Versión SW Equipo",asc(new Uint8Array(dv.buffer,26,4)));
     addH("V. Máxima Tren",dv.getUint16(30,true)+" km/h");
-    addH("Código Operador",dv.getUint16(32,true));
+    const op=dv.getUint16(32,true);addH("Código Operador",`${op} - ${OPERADOR_MAP[op]||'Desconocido'}`);
     totalInFile=dv.getUint32(34,true);
     addH("Total Paquetes",totalInFile);
-    addH("Checksum Cab.","0x"+dv.getUint16(38,true).toString(16).toUpperCase());
+
+    let cabSum=0;for(let i=2;i<=37;i++)cabSum+=dv.getUint8(i);
+    const cabCK=dv.getUint16(38,true);
+    headerChecksumOK=(cabSum&0xFFFF)===cabCK;
+    addH("Checksum Cab.","0x"+cabCK.toString(16).toUpperCase()+(headerChecksumOK?' <span class="ok">(OK)</span>':' <span class="error">(ERROR)</span>'));
+
     document.getElementById('headerSection').style.display='block';
+
     let ptr=40,distAcc=0,vL=null,tL=null,lastEB=-1,pOn=-1,uniqueVFound=new Set(),readCount=0;
+
     while(readCount<totalInFile&&ptr+30<=dv.byteLength){
         if(dv.getUint16(ptr,true)!==0xDCBA){ptr++;continue;}
         readCount++;
-        const pN=dv.getUint32(ptr+2,true),vC=dv.getUint16(ptr+6,true),sec=dv.getUint32(ptr+8,true),ms=dv.getUint16(ptr+12,true),dd=dv.getInt32(ptr+14,true),val=dv.getInt32(ptr+18,true),vr=dv.getUint16(ptr+22,true),vc=dv.getUint16(ptr+24,true),vi=dv.getUint16(ptr+26,true);
+
+        const pN=dv.getUint32(ptr+2,true),vC=dv.getUint16(ptr+6,true),
+              sec=dv.getUint32(ptr+8,true),ms=dv.getUint16(ptr+12,true),
+              dd=dv.getInt32(ptr+14,true),val=dv.getInt32(ptr+18,true),
+              vr=dv.getUint16(ptr+22,true),vc=dv.getUint16(ptr+24,true),vi=dv.getUint16(ptr+26,true);
+
         const ts=sec*1000+ms,dt=new Date(ts);
         if(vC===0xFF03)pOn=ts;
         distAcc+=dd;
+
         if(vC===0xFF20){
             if(val===1&&lastEB===0&&ts!==pOn){
                 chartLines.ebx.push(dt);chartLines.eby.push(2.2);chartLines.ebt.push("FRENO EMERGENCIA");
             }
             lastEB=val;
         }
+
         if(vL!==null&&ts!==tL){
             let a=((vr-vL)/3.6)/((ts-tL)/1000);
             if(a>=-2.5&&a<=2.5){chartLines.accx.push(dt);chartLines.accy.push(a);}
         }
         vL=vr;tL=ts;
+
         chartLines.x.push(dt);chartLines.real.push(vr);chartLines.ctrl.push(vc);chartLines.interf.push(vi);chartLines.dist.push(distAcc);
+
         if(BALIZA_CODES.includes(vC)&&val!==0){
             chartLines.bx.push(dt);chartLines.by.push(10);chartLines.bt.push(`${VAR_MAP[vC]||'B'}: ${val}`);chartLines.bc.push(getBColor(val));
         }
-        rawData.push({pN,ts,vC,val,vr,vc,dist:distAcc,dtS:dt.toLocaleDateString(),tmS:dt.toLocaleTimeString(),ms});
+
+        let pktSum=0;
+        for(let i=2;i<=27;i++)pktSum+=dv.getUint8(ptr+i);
+        const storedCK=dv.getUint16(ptr+28,true);
+        const ckOK=(pktSum&0xFFFF)===storedCK;
+
+        rawData.push({pN,ts,vC,val,vr,vc,vi,dist:distAcc,dtS:dt.toLocaleDateString(),tmS:dt.toLocaleTimeString(),ms,ckOK});
         uniqueVFound.add(vC);
         ptr+=30;
     }
+
     Array.from(uniqueVFound).sort((a,b)=>a-b).forEach(c=>{
         const label=document.createElement('label');label.className='filter-item';
         const vName=VAR_MAP[c]||`Variable 0x${c.toString(16).toUpperCase()}`;
@@ -190,11 +222,14 @@ function parse(dv){
         selectedVars.add(c);
         label.querySelector('input').addEventListener('change',e=>{if(e.target.checked)selectedVars.add(parseInt(e.target.value));else selectedVars.delete(parseInt(e.target.value));refreshTables(currentRange[0],currentRange[1]);});
     });
+
     document.getElementById('chartsSection').style.display='block';
     document.getElementById('tablesSection').style.display='block';
     drawPlot();
     refreshTables(null,null);
-    dom.status.innerText=`PROCESO FINALIZADO (${readCount} paqs)`;
+
+    const msg=`PROCESO FINALIZADO (${readCount} paqs)`;
+    dom.status.innerText=headerChecksumOK?msg:`${msg} — ¡Checksum cabecera ERRÓNEA!`;
     dom.spinner.style.display="none";
 }
 
@@ -207,11 +242,12 @@ function drawPlot(){
         {x:chartLines.accx,y:chartLines.accy,name:'Aceleración',mode:'lines',line:{color:'#9467bd',width:1.5,shape:'spline'},yaxis:'y2',fill:'none',visible:false,hovertemplate:'%{y:.2f} m/s²<extra></extra>'},
         {x:chartLines.ebx,y:chartLines.eby,text:chartLines.ebt,name:'Freno Emergencia',mode:'markers',marker:{color:'red',size:12,symbol:'square'},yaxis:'y2',visible:true,hovertemplate:'<b>FRENO EMERGENCIA</b><extra></extra>'}
     ],{
-        xaxis:{type:'date',rangeslider:{visible:true}},
-        yaxis:{title:'km/h',range:[0,150],fixedrange:true},
-        yaxis2:{title:'m/s²',range:[-3,3],overlaying:'y',side:'right',visible:false,showgrid:false},
-        hovermode:'x unified',height:480,margin:{t:30,b:20,l:50,r:50},legend:{orientation:'h',y:1.15}
-    },{responsive:true,displaylogo:false,modeBarButtonsToRemove:['select2d','lasso2d']});
+        xaxis:{type:'date', rangeslider:{visible:false}, fixedrange:false},
+        yaxis:{title:'km/h', range:[0,150], fixedrange:true},
+        yaxis2:{title:'m/s²', range:[-3,3], overlaying:'y', side:'right', visible:false, showgrid:false},
+        hovermode:'x unified', height:480, margin:{t:30,b:20,l:50,r:50}, legend:{orientation:'h', y:1.15}
+    },{responsive:true, displaylogo:false, modeBarButtonsToRemove:['select2d','lasso2d','resetScale2d']});
+
     document.getElementById('mainChart').on('plotly_relayout',e=>{
         let s=null,n=null;
         if(e['xaxis.range[0]']){s=new Date(e['xaxis.range[0]']).getTime();n=new Date(e['xaxis.range[1]']).getTime();}
@@ -239,9 +275,12 @@ function refreshTables(s,n){
             if(selectedVars.has(p.vC))filtered.push(p);
         }
     }
+
     dom.summaryBody.innerHTML=Object.keys(counts).map(k=>({n:VAR_MAP[k]||'Variable',id:parseInt(k),v:counts[k],p:countVisible>0?((counts[k]/countVisible)*100).toFixed(2):"0.00"})).sort((a,b)=>b.v-a.v)
         .map(i=>`<tr><td>0x${i.id.toString(16).toUpperCase()}</td><td>${i.n}</td><td>${i.v}</td><td>${i.p}%</td></tr>`).join('');
-    dom.stats.innerText=`ARCHIVO: ${rawData.length} PAQS | TRAMO: ${countVisible}`;
+
+    dom.stats.innerText=`ARCHIVO: ${rawData.length} PAQS | TRAMO: ${countVisible} | Checksum cabecera: ${headerChecksumOK?'OK':'ERROR'}`;
+
     dom.packets.innerHTML="";
     let index=0;
     const chunkSize=4000;
@@ -250,7 +289,8 @@ function refreshTables(s,n){
         let html="";
         for(let i=index;i<end;i++){
             const p=filtered[i];
-            html+=`<tr><td>${p.pN}</td><td>${p.dtS}</td><td>${p.tmS}</td><td>${p.ms}</td><td>0x${p.vC.toString(16).toUpperCase()}</td><td>${VAR_MAP[p.vC]||'Var'}</td><td>${p.val}</td><td>${p.dist}</td><td>${p.vr}</td><td>${p.vc}</td><td>OK</td></tr>`;
+            const ckHTML=p.ckOK?'<span style="color:#28a745">OK</span>':'<span style="color:#dc3545">ERROR</span>';
+            html+=`<tr><td>${p.pN}</td><td>${p.dtS}</td><td>${p.tmS}</td><td>${p.ms}</td><td>0x${p.vC.toString(16).toUpperCase()}</td><td>${VAR_MAP[p.vC]||'Var'}</td><td>${p.val}</td><td>${p.dist}</td><td>${p.vr}</td><td>${p.vc}</td><td>${p.vi}</td><td>${ckHTML}</td></tr>`;
         }
         const blob=document.createElement('tbody');
         blob.innerHTML=html;
@@ -273,10 +313,10 @@ dom.btnShowSummary.onclick=()=>{document.getElementById('summaryWrapper').style.
 dom.btnShowDetails.onclick=()=>{document.getElementById('summaryWrapper').style.display='none';document.getElementById('detailsWrapper').style.display='block';};
 
 dom.export.onclick=()=>{
-    let csv="Paquete;Fecha;Hora;Variable;Valor;Distancia;VReal;VCtrl\n";
+    let csv="Paquete;Fecha;Hora;Variable;Valor;Distancia;VReal;VCtrl;VInterv;CK\n";
     rawData.forEach(p=>{
         if(selectedVars.has(p.vC)&&(!currentRange[0]||(p.ts>=currentRange[0]&&p.ts<=currentRange[1]))){
-            csv+=`${p.pN};${p.dtS};${p.tmS};0x${p.vC.toString(16).toUpperCase()};${p.val};${p.dist};${p.vr};${p.vc}\n`;
+            csv+=`${p.pN};${p.dtS};${p.tmS};0x${p.vC.toString(16).toUpperCase()};${p.val};${p.dist};${p.vr};${p.vc};${p.vi};${p.ckOK?'OK':'ERROR'}\n`;
         }
     });
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='analisis_asfa.csv';a.click();
