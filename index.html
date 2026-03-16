@@ -192,9 +192,13 @@ function parse(dv){
             lastEB=val;
         }
 
+        // === ACELERACIÓN: SOLO VALORES ±2.5 (pero la spline mantiene la continuidad entre puntos válidos) ===
         if(vL!==null&&ts!==tL){
             let a=((vr-vL)/3.6)/((ts-tL)/1000);
-            if(a>=-2.5&&a<=2.5){chartLines.accx.push(dt);chartLines.accy.push(a);}
+            if(a>=-2.5&&a<=2.5){
+                chartLines.accx.push(dt);
+                chartLines.accy.push(a);
+            }
         }
         vL=vr;tL=ts;
 
@@ -244,7 +248,7 @@ function drawPlot(){
     ],{
         xaxis:{type:'date', rangeslider:{visible:false}, fixedrange:false},
         yaxis:{title:'km/h', range:[0,150], fixedrange:true},
-        yaxis2:{title:'m/s²', range:[-3,3], overlaying:'y', side:'right', visible:false, showgrid:false},
+        yaxis2:{title:'m/s²', range:[-3,3], overlaying:'y', side:'right', visible:true, showgrid:false},
         hovermode:'x unified', height:480, margin:{t:30,b:20,l:50,r:50}, legend:{orientation:'h', y:1.15}
     },{responsive:true, displaylogo:false, modeBarButtonsToRemove:['select2d','lasso2d','resetScale2d']});
 
@@ -257,7 +261,7 @@ function drawPlot(){
 }
 
 dom.accelToggle.onchange=function(){
-    Plotly.update('mainChart',{visible:[true,true,true,true,this.checked,true]},{'yaxis2.visible':this.checked});
+    Plotly.update('mainChart',{visible:[true,true,true,true,this.checked,true]});
 };
 
 function refreshTables(s,n){
