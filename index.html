@@ -335,6 +335,9 @@
                             <input type="checkbox" id="smoothToggle" style="width:20px;height:20px;"> Suavizar curvas
                         </label>
                         <label style="cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:600;">
+                            <input type="checkbox" id="showPointsToggle" style="width:20px;height:20px;"> Mostrar puntos
+                        </label>
+                        <label style="cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:600;">
                             <input type="checkbox" id="relDistToggle" style="width:20px;height:20px;"> Distancia relativa
                     </label>
                     <button class="btn btn-outline btn-sm" id="btnExportImg" title="Guardar gráfica como imagen PNG">📷 Exportar gráfica</button>
@@ -526,7 +529,8 @@
             drop:           document.getElementById('dropZone'),
             fileInput:      document.getElementById('fileInput'),
             accelToggle:    document.getElementById('accelToggle'),
-            smoothToggle:   document.getElementById('smoothToggle'),
+            smoothToggle:      document.getElementById('smoothToggle'),
+            showPointsToggle:  document.getElementById('showPointsToggle'),
             relDistToggle:  document.getElementById('relDistToggle'),
             btnShowSummary: document.getElementById('btnShowSummary'),
             btnShowDetails: document.getElementById('btnShowDetails'),
@@ -755,9 +759,10 @@
             if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
             dom.header.innerHTML = ''; dom.packets.innerHTML = '';
             dom.summaryBody.innerHTML = ''; dom.filterGrid.innerHTML = '';
-            dom.accelToggle.checked  = false;
-            dom.smoothToggle.checked = false;
-            dom.relDistToggle.checked = false;
+            dom.accelToggle.checked      = false;
+            dom.smoothToggle.checked     = false;
+            dom.showPointsToggle.checked = false;
+            dom.relDistToggle.checked    = false;
             dom.progressBar.style.width = '0%';
             ['headerSection','chartsSection','tablesSection'].forEach(
                 id => document.getElementById(id).style.display = 'none');
@@ -1061,31 +1066,31 @@
             const { px, preal, pctrl, pif, pdist, pctrlActivo, sliceAccX, sliceAccY } =
                 decimateRange(tsStart, tsEnd);
 
-            // customdata: [[dist0, ctrl0], [dist1, ctrl1], ...]
-            const relDist  = dom.relDistToggle.checked;
-            const distBase = relDist && pdist.length ? pdist[0] : 0;
-            const cdReal   = pdist.map((d, i) => [d - distBase, decodeCtrlActivo(pctrlActivo[i])]);
-            const distTip  = (hasDistData ? 'Dist' : 'Dist calc.') + (relDist ? ' rel.' : '');
-            const lineMode  = smooth ? 'lines+markers' : 'lines';
-            const hvShape   = smooth ? 'spline'        : 'hv';
-            const markerDot = { size: 5, opacity: 0.7 };
+            const relDist    = dom.relDistToggle.checked;
+            const distBase   = relDist && pdist.length ? pdist[0] : 0;
+            const cdReal     = pdist.map((d, i) => [d - distBase, decodeCtrlActivo(pctrlActivo[i])]);
+            const distTip    = (hasDistData ? 'Dist' : 'Dist calc.') + (relDist ? ' rel.' : '');
+            const showPoints = dom.showPointsToggle.checked;
+            const withPts    = showPoints ? 'lines+markers' : 'lines';
+            const hvShape    = smooth ? 'spline' : 'hv';
+            const markerDot  = { size: 5, opacity: 0.7 };
 
             return [
-                // 0: V. Real — sin suavizado, con puntos si smooth activo
+                // 0: V. Real — sin suavizado, puntos según showPoints/smooth
                 { type: 'scatter', name: 'V. Real', x: px, y: preal,
-                  customdata: cdReal, mode: smooth ? 'lines+markers' : 'lines',
+                  customdata: cdReal, mode: withPts,
                   line: { color: '#1f77b4', width: 2, shape: 'linear' },
                   marker: markerDot,
                   hovertemplate: `<b>%{x|%d/%m/%Y %H:%M:%S}</b><br>%{y} km/h<br>${distTip}: %{customdata[0]} m<br>Control: %{customdata[1]}<extra>V. Real</extra>` },
-                // 1: V. Control — con suavizado
+                // 1: V. Control — con suavizado y puntos
                 { type: 'scattergl', name: 'V. Control', x: px, y: pctrl,
-                  mode: lineMode, line: { color: '#ff7f0e', shape: hvShape, width: 1.5 },
+                  mode: withPts, line: { color: '#ff7f0e', shape: hvShape, width: 1.5 },
                   marker: markerDot,
                   visible: !accelVisible,
                   hovertemplate: '%{y} km/h<extra>V. Control</extra>' },
-                // 2: V. Intervención — con suavizado
+                // 2: V. Intervención — con suavizado y puntos
                 { type: 'scattergl', name: 'V. Interv.', x: px, y: pif,
-                  mode: lineMode, line: { color: '#d62728', shape: hvShape, width: 1.5 },
+                  mode: withPts, line: { color: '#d62728', shape: hvShape, width: 1.5 },
                   marker: markerDot,
                   visible: !accelVisible,
                   hovertemplate: '%{y} km/h<extra>V. Interv.</extra>' },
@@ -1094,9 +1099,9 @@
                   x: mk.bx, y: mk.by, customdata: mk.bt,
                   mode: 'markers', marker: { color: mk.bc, size: 10, symbol: 'diamond' },
                   hovertemplate: '<b>%{x|%d/%m/%Y %H:%M:%S}</b><br>%{customdata}<extra>Baliza</extra>' },
-                // 4: Aceleración — sin suavizado, con puntos si smooth activo
+                // 4: Aceleración — sin suavizado, puntos según showPoints/smooth
                 { type: 'scattergl', name: 'Aceleración',
-                  x: sliceAccX, y: sliceAccY, mode: smooth ? 'lines+markers' : 'lines',
+                  x: sliceAccX, y: sliceAccY, mode: withPts,
                   line: { color: '#9467bd', width: 1.5, shape: 'linear' },
                   marker: markerDot,
                   yaxis: 'y2', fill: 'none', visible: accelVisible,
@@ -1122,7 +1127,7 @@
                 xaxis:  { type: 'date', rangeslider: { visible: false }, fixedrange: false },
                 yaxis:  { title: 'km/h', range: [0, 150], fixedrange: true },
                 yaxis2: { title: 'm/s²', range: [-3, 3], overlaying: 'y', side: 'right',
-                          visible: true, showgrid: false, fixedrange: true },
+                          visible: false, showgrid: false, fixedrange: true },
                 hovermode: 'closest',
                 height: 480,
                 margin: { t: 30, b: 20, l: 50, r: 50 },
@@ -1163,40 +1168,42 @@
         // Actualiza datos de velocidad/aceleración y visibilidades según modo activo
         function redrawDecimated(tsStart, tsEnd) {
             if (!chartFull || !chartMarkers) return;
-            const accel  = dom.accelToggle.checked;
-            const smooth = dom.smoothToggle.checked;
+            const accel      = dom.accelToggle.checked;
+            const smooth     = dom.smoothToggle.checked;
+            const showPoints = dom.showPointsToggle.checked;
             const { px, preal, pctrl, pif, pdist, pctrlActivo, sliceAccX, sliceAccY } =
                 decimateRange(tsStart, tsEnd);
 
-            const cdReal    = (() => {
+            const cdReal = (() => {
                 const relDist  = dom.relDistToggle.checked;
                 const distBase = relDist && pdist.length ? pdist[0] : 0;
                 return pdist.map((d, i) => [d - distBase, decodeCtrlActivo(pctrlActivo[i])]);
             })();
-            const lineMode  = smooth ? 'lines+markers' : 'lines';
-            const hvShape   = smooth ? 'spline'        : 'hv';
+            const withPts   = showPoints ? 'lines+markers' : 'lines';
+            const hvShape   = smooth ? 'spline' : 'hv';
             const markerDot = { size: 5, opacity: 0.7 };
 
-            // Trazas 0-2: V.Real sin suavizado, V.Control y V.Interv. con suavizado
+            // Trazas 0-2
             Plotly.restyle('mainChart', {
-                x:          [px,     px,    px   ],
-                y:          [preal,  pctrl, pif  ],
-                customdata: [cdReal, pdist, pdist],
-                mode:       [smooth ? 'lines+markers' : 'lines', lineMode, lineMode],
+                x:            [px,     px,    px   ],
+                y:            [preal,  pctrl, pif  ],
+                customdata:   [cdReal, pdist, pdist],
+                mode:         [withPts, withPts, withPts],
                 'line.shape': ['linear', hvShape, hvShape],
-                marker:     [markerDot, markerDot, markerDot],
-                visible:    [true,  !accel, !accel]
+                marker:       [markerDot, markerDot, markerDot],
+                visible:      [true,  !accel, !accel]
             }, [0, 1, 2]);
 
-            // Traza 4: aceleración sin suavizado, con puntos si smooth activo
+            // Traza 4: aceleración + visibilidad eje Y2
             Plotly.restyle('mainChart', {
                 x:            [sliceAccX],
                 y:            [sliceAccY],
-                mode:         [smooth ? 'lines+markers' : 'lines'],
+                mode:         [withPts],
                 'line.shape': ['linear'],
                 marker:       [markerDot],
                 visible:      [accel]
             }, [4]);
+            Plotly.relayout('mainChart', { 'yaxis2.visible': accel });
 
             // Trazas 3, 5 y 6: marcadores — siempre desde chartMarkers (nunca de gd.data)
             Plotly.restyle('mainChart', {
@@ -1211,6 +1218,9 @@
             redrawDecimated(currentRange[0], currentRange[1]);
         };
         dom.smoothToggle.onchange = function () {
+            redrawDecimated(currentRange[0], currentRange[1]);
+        };
+        dom.showPointsToggle.onchange = function () {
             redrawDecimated(currentRange[0], currentRange[1]);
         };
         dom.relDistToggle.onchange = function () {
